@@ -53,13 +53,13 @@ switch (protocol) {
 const client = new DaprClient(host, port, protocol)
 
 app.get('/startCandidateAdding', async (req, res) => {
-    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'appstate', value: '1' }])
+    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'appstate', value: 1 }])
     console.log("Phase 1")
     res.send('Phase 1 initiated')
 })
 
 app.get('/finishCandidateAdding', async (req, res) => {
-    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'appstate', value: '2' }])
+    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'appstate', value: 2 }])
     console.log("Phase 2")
     res.send('Phase 2 initiated')
 })
@@ -84,6 +84,10 @@ app.get('/getCandidates', async (req, res) => {
 })
 
 app.post('/addCandidate', async (req, res) => {
+    let currentAppState = await client.state.get(DAPR_STATE_STORE_NAME, 'appstate')
+    console.log(JSON.stringify(currentAppState))
+    if (currentAppState !== 1) return res.sendStatus(400)
+
     let currentCandidates = await client.state.get(DAPR_STATE_STORE_NAME, 'candidates')
     console.log('currentCandidates:', JSON.stringify(currentCandidates))
     const newCandidate = req.body
