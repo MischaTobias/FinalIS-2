@@ -1,0 +1,1 @@
+dapr run --app-id order-processor --resources-path ../../resources/ -- npm run start
