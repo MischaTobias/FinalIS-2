@@ -139,6 +139,11 @@ app.get('/getVotes', async (req, res) => {
     res.send(currentVotes[0].value)
 })
 
+app.get('/cleanFrauds', async (req, res) => {
+    await saveStorage([{ key: 'frauds', value: null }])
+    return res.send('Frauds cleared')
+})
+
 app.get('/getFrauds', async (req, res) => {
     let currentFrauds = await getStorage('frauds')
     if (!currentFrauds) return res.send('Sin fraudes')
@@ -156,7 +161,6 @@ app.post('/vote', async (req, res) => {
     let currentVotes = await getStorage('votes')
     if (currentVotes) {
         let currentCandidates = await getStorage('candidates')
-        console.log(JSON.stringify(currentCandidates[0].value));
         if (!currentCandidates[0].value.some(c => c.id === newVote.CandidateNumber)) newVote.CandidateNumber = 0
 
         if (!currentVotes[0].value.some(v => v.DPI === newVote.DPI)) {
@@ -202,6 +206,40 @@ app.post('/vote', async (req, res) => {
     ]
     await saveStorage([{ key: 'votes', value: currentVotes }])
     return res.send({ response: `Vote added`, newVote })
+})
+
+app.get('/statistics', async (req, res) => {
+    let currentAppState = await getStorage('appstate')
+    if (currentAppState !== 3 && currentAppState !== 4) return res.sendStatus(400)
+
+    let statistics = {}
+
+    let currentVotes = await getStorage('votes')
+
+    if (!currentVotes) statistics.votes = 'Sin votos'
+    else {
+        let votes = {}
+        let currentCandidates = await getStorage('candidates')
+        currentVotes[0].value.forEach(v => {
+            if (v.CandidateNumber === 0) {
+                if (typeof votes.Nulo === 'undefined') votes.Nulo = 1
+                else votes.Nulo += 1
+            } else {
+                let candidate = currentCandidates[0].value.filter(c => c.id === v.CandidateNumber)[0];
+                if (typeof votes[candidate.Name] === 'undefined') votes[candidate.Name] = 1
+                else votes[candidate.Name] += 1
+            }
+        })
+
+        statistics.votes = votes
+    }
+
+    let currentFrauds = await getStorage('frauds')
+
+    if (!currentFrauds) statistics.frauds = 'Sin fraudes'
+    else statistics.frauds = currentFrauds[0].value.length
+
+    res.send(statistics)
 })
 
 app.listen(apiPort, () => {
