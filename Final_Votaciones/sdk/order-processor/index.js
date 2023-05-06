@@ -139,6 +139,13 @@ app.get('/getVotes', async (req, res) => {
     res.send(currentVotes[0].value)
 })
 
+app.get('/getFrauds', async (req, res) => {
+    let currentFrauds = await getStorage('frauds')
+    if (!currentFrauds) return res.send('Sin fraudes')
+
+    res.send(currentFrauds[0].value)
+})
+
 app.post('/vote', async (req, res) => {
     let currentAppState = await getStorage('appstate')
     if (currentAppState !== 3) return res.sendStatus(400)
@@ -148,6 +155,10 @@ app.post('/vote', async (req, res) => {
 
     let currentVotes = await getStorage('votes')
     if (currentVotes) {
+        let currentCandidates = await getStorage('candidates')
+        console.log(JSON.stringify(currentCandidates[0].value));
+        if (!currentCandidates[0].value.some(c => c.id === newVote.CandidateNumber)) newVote.CandidateNumber = 0
+
         if (!currentVotes[0].value.some(v => v.DPI === newVote.DPI)) {
             newVote.id = currentVotes[0].value.length + 1
             currentVotes[0].value = [...currentVotes[0].value, newVote]
@@ -159,10 +170,11 @@ app.post('/vote', async (req, res) => {
 
         let currentFrauds = await getStorage('frauds')
         if (currentFrauds) {
+            newVote.id = currentFrauds[0].value.length + 1
             currentFrauds[0].value = [...currentFrauds[0].value, newVote]
 
             await saveStorage([{ key: 'frauds', value: currentFrauds }])
-            return res.sendStatus({ response: `Vote added`, newVote })
+            return res.send({ response: `Vote added`, newVote })
         }
         newVote.id = 1
 
