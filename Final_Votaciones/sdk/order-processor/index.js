@@ -45,61 +45,65 @@ switch (protocol) {
 
 // const CANDIDATE = {
 //     name,
-//     position,
-//     party,
-//     votes: list[ids of users]
+//     party
+// }
+
+// const VOTE = {
+//     dpi,
+//     candidate_no,
+//     date,
+//     origin_ip
 // }
 
 const client = new DaprClient(host, port, protocol)
 
+const getStorage = async (key) => await client.state.get(DAPR_STATE_STORE_NAME, key)
+const saveStorage = async (data) => await client.state.save(DAPR_STATE_STORE_NAME, data)
+
 app.get('/startCandidateAdding', async (req, res) => {
-    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'appstate', value: 1 }])
-    console.log("Phase 1")
+    await saveStorage([{ key: 'appstate', value: 1 }])
     res.send('Phase 1 initiated')
 })
 
 app.get('/finishCandidateAdding', async (req, res) => {
-    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'appstate', value: 2 }])
-    console.log("Phase 2")
+    await saveStorage([{ key: 'appstate', value: 2 }])
     res.send('Phase 2 initiated')
 })
 
 app.get('/getPhase', async (req, res) => {
-    const savedPhase = await client.state.get(DAPR_STATE_STORE_NAME, 'appstate')
-    console.log("Current app state: ", savedPhase)
+    const savedPhase = await getStorage('appstate')
     res.send(`Current app state: ${savedPhase}`)
 })
 
 app.get('/cleanCandidates', async (req, res) => {
-    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'candidates', value: null }])
+    await saveStorage([{ key: 'candidates', value: null }])
     return res.send('Candidates cleared')
 })
 
 app.get('/getCandidates', async (req, res) => {
-    let currentCandidates = await client.state.get(DAPR_STATE_STORE_NAME, 'candidates')
+    let currentCandidates = await getStorage('candidates')
     if (!currentCandidates) return res.send('Sin candidatos')
 
-    console.log(JSON.stringify(currentCandidates[0].value))
     res.send(currentCandidates[0].value)
 })
 
 app.post('/addCandidate', async (req, res) => {
-    let currentAppState = await client.state.get(DAPR_STATE_STORE_NAME, 'appstate')
-    console.log(JSON.stringify(currentAppState))
+    let currentAppState = await getStorage('appstate')
     if (currentAppState !== 1) return res.sendStatus(400)
 
-    let currentCandidates = await client.state.get(DAPR_STATE_STORE_NAME, 'candidates')
-    console.log('currentCandidates:', JSON.stringify(currentCandidates))
     const newCandidate = req.body
-
     if (!newCandidate.Name || !newCandidate.Party) return res.sendStatus(400)
 
+    let currentCandidates = await getStorage('candidates')
     if (currentCandidates) {
+        newCandidate.id = currentCandidates[0].value.length + 1
         currentCandidates[0].value = [...currentCandidates[0].value, newCandidate]
 
-        await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'candidates', value: currentCandidates }])
+        await saveStorage([{ key: 'candidates', value: currentCandidates }])
         return res.send({ response: `Candidate added`, newCandidate })
     }
+
+    newCandidate.id = 1
 
     currentCandidates = [
         {
@@ -109,50 +113,84 @@ app.post('/addCandidate', async (req, res) => {
             ]
         }
     ]
-    await client.state.save(DAPR_STATE_STORE_NAME, [{ key: 'candidates', value: currentCandidates }])
+    await saveStorage([{ key: 'candidates', value: currentCandidates }])
     return res.send({ response: `Candidate added`, newCandidate })
-
-
-    // const candidates = [
-    //     {
-    //         name,
-    //         position,
-    //         party,
-    //         votes: list[ids of users]
-    //     }
-    // ]
 })
 
+app.get('/startVoting', async (req, res) => {
+    await saveStorage([{ key: 'appstate', value: 3 }])
+    res.send('Phase 3 initiated')
+})
+
+app.get('/finishVoting', async (req, res) => {
+    await saveStorage([{ key: 'appstate', value: 4 }])
+    res.send('Phase 4 initiated')
+})
+
+app.get('/cleanVotes', async (req, res) => {
+    await saveStorage([{ key: 'votes', value: null }])
+    return res.send('Votes cleared')
+})
+
+app.get('/getVotes', async (req, res) => {
+    let currentVotes = await getStorage('votes')
+    if (!currentVotes) return res.send('Sin votos')
+
+    res.send(currentVotes[0].value)
+})
+
+app.post('/vote', async (req, res) => {
+    let currentAppState = await getStorage('appstate')
+    if (currentAppState !== 3) return res.sendStatus(400)
+
+    const newVote = req.body
+    if (!newVote.DPI || !newVote.CandidateNumber || !newVote.OriginIP) return res.sendStatus(400)
+
+    let currentVotes = await getStorage('votes')
+    if (currentVotes) {
+        if (!currentVotes[0].value.some(v => v.DPI === newVote.DPI)) {
+            newVote.id = currentVotes[0].value.length + 1
+            currentVotes[0].value = [...currentVotes[0].value, newVote]
+
+            await saveStorage([{ key: 'votes', value: currentVotes }])
+            return res.send({ response: `Vote added`, newVote })
+        }
 
 
-// async function main() {
-//     const client = new DaprClient(host, port, protocol)
+        let currentFrauds = await getStorage('frauds')
+        if (currentFrauds) {
+            currentFrauds[0].value = [...currentFrauds[0].value, newVote]
 
-//     // For each loop, Save order, Get order, and Delete order
-//     for (let i = 1; i <= 100; i++) {
-//         const order = { orderId: i.toString() }
-//         const state = [
-//             {
-//                 key: order.orderId,
-//                 value: order
-//             }
-//         ]
+            await saveStorage([{ key: 'frauds', value: currentFrauds }])
+            return res.sendStatus({ response: `Vote added`, newVote })
+        }
+        newVote.id = 1
 
-//         // Save state into a state store
-//         await client.state.save(DAPR_STATE_STORE_NAME, state)
-//         console.log("Saving Order: ", order)
+        currentFrauds = [
+            {
+                key: 'frauds',
+                value: [
+                    newVote
+                ]
+            }
+        ]
+        await saveStorage([{ key: 'frauds', value: currentFrauds }])
+        return res.send({ response: `Vote added`, newVote })
+    }
 
-//         // Get state from a state store
-//         const savedOrder = await client.state.get(DAPR_STATE_STORE_NAME, order.orderId)
-//         console.log("Getting Order: ", savedOrder)
+    newVote.id = 1
 
-//         // Delete state from the state store
-//         await client.state.delete(DAPR_STATE_STORE_NAME, order.orderId)
-//         console.log("Deleting Order: ", order)
-
-//         await sleep(500)
-//     }
-// }
+    currentVotes = [
+        {
+            key: 'votes',
+            value: [
+                newVote
+            ]
+        }
+    ]
+    await saveStorage([{ key: 'votes', value: currentVotes }])
+    return res.send({ response: `Vote added`, newVote })
+})
 
 app.listen(apiPort, () => {
     console.log(`App on port ${apiPort}`);
